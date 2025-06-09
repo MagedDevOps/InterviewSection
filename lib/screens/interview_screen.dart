@@ -1,4 +1,4 @@
-// ignore_for_file: avoid_print, deprecated_member_use
+// ignore_for_file: avoid_print, deprecated_member_use, unused_element, unused_field
 
 import 'package:flutter/material.dart';
 import 'dart:async';
@@ -68,7 +68,7 @@ class _InterviewScreenState extends State<InterviewScreen>
   bool _isListening = false;
   String _transcribedText = '';
 
-  bool _isButtonLoading = false;
+  final bool _isButtonLoading = false;
   Timer? _loadingTimeoutTimer;
   DateTime? _lastRecordTap;
 

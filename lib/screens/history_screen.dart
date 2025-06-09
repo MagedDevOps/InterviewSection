@@ -167,7 +167,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Text(
-                            '${interview.technologies.join(", ")}',
+                            interview.technologies.join(", "),
                             style: const TextStyle(
                               color: AppColors.primaryPurple,
                               fontSize: 12,
