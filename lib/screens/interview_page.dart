@@ -36,7 +36,7 @@ class InterviewPage extends StatelessWidget {
                           'Welcome! 🎉',
                           style: TextStyle(
                             color: AppColors.lightText,
-                            fontSize: 30,
+                            fontSize: 24,
                             fontFamily: 'Inter',
                             height: 1.40,
                             fontWeight: FontWeight.w600,
@@ -46,7 +46,10 @@ class InterviewPage extends StatelessWidget {
                         Align(
                           alignment: Alignment.centerLeft,
                           child: IconButton(
-                            icon: const Icon(Icons.arrow_back, color: Colors.white),
+                            icon: const Icon(
+                              Icons.arrow_back,
+                              color: Colors.white,
+                            ),
                             onPressed: () {
                               Navigator.pop(context);
                             },
@@ -54,7 +57,7 @@ class InterviewPage extends StatelessWidget {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 40),
 
                     // Introduction text
                     const Text(
@@ -66,7 +69,7 @@ class InterviewPage extends StatelessWidget {
                         height: 1.40,
                       ),
                     ),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 40),
 
                     // Numbered steps
                     const NumberPoint(
@@ -77,7 +80,8 @@ class InterviewPage extends StatelessWidget {
 
                     const NumberPoint(
                       number: '2',
-                      text: 'Choose your level to get questions that match your experience.',
+                      text:
+                          'Choose your level to get questions that match your experience.',
                     ),
                     const SizedBox(height: 14),
 
@@ -91,7 +95,7 @@ class InterviewPage extends StatelessWidget {
                         height: 1.40,
                       ),
                     ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 40),
 
                     // Interview details section
                     const Text(
@@ -104,8 +108,8 @@ class InterviewPage extends StatelessWidget {
                     ),
                     const SizedBox(height: 16),
 
-                    _buildDetailRow('Number of questions:', '6'),
-                    _buildDetailRow('Duration:', '45 minutes'),
+                    _buildDetailRow('Number of questions:', '5'),
+                    _buildDetailRow('Duration:', '10 minutes'),
 
                     RichText(
                       text: const TextSpan(
@@ -117,28 +121,28 @@ class InterviewPage extends StatelessWidget {
                         children: [
                           TextSpan(
                             text: 'Time limit:  ',
-                            style: TextStyle(
-                              color: AppColors.primaryPurple,
-                            ),
+                            style: TextStyle(color: AppColors.primaryPurple),
                           ),
                           TextSpan(
-                            text: 'Once the time is up, you won\'t be able to continue. Press "Finish" to see your score, weaknesses, and recommendations to improve.',
-                            style: TextStyle(
-                              color: AppColors.lightText,
-                            ),
+                            text:
+                                'Once the time is up, you won\'t be able to continue. Press "Finish" to see your score, weaknesses, and recommendations to improve.',
+                            style: TextStyle(color: AppColors.lightText),
                           ),
                         ],
                       ),
                     ),
-                    
+
                     // GO button
                     const SizedBox(height: 30),
                     GradientButton(
                       text: "GO",
+                      height: 75,
                       onPressed: () {
                         Navigator.push(
                           context,
-                          MaterialPageRoute(builder: (context) => const FieldSelectionPage()),
+                          MaterialPageRoute(
+                            builder: (context) => const FieldSelectionPage(),
+                          ),
                         );
                       },
                     ),

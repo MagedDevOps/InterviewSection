@@ -29,66 +29,56 @@ class _FieldSelectionPageState extends State<FieldSelectionPage> {
       body: Stack(
         children: [
           const BackgroundDecorations(),
-          Padding(
-            padding: const EdgeInsets.only(top: 40, left: 16),
-            child: Align(
-              alignment: Alignment.topLeft,
-              child: Row(
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.arrow_back, color: Colors.white),
-                    onPressed: () {
-                      Navigator.pop(context);
-                    },
-                  ),
-                  const Spacer(),
-                  IconButton(
-                    icon: const Icon(Icons.history, color: Colors.white),
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const HistoryScreen(),
-                        ),
-                      );
-                    },
-                    tooltip: 'View Interview History',
-                  ),
-                ],
-              ),
-            ),
-          ),
           Column(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              const SizedBox(height: 40),
-              const CircleAvatar(
-                radius: 30,
-                backgroundImage: AssetImage("assets/images/home4.png"),
-              ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 70),
 
-              // Instruction text
-              const Text(
-                "Choose the field and determine the level.",
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.lightText,
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.arrow_back, color: Colors.white),
+                      onPressed: () {
+                        Navigator.pop(context);
+                      },
+                    ),
+                    const CircleAvatar(
+                      radius: 40,
+                      backgroundColor: Colors.transparent,
+                      backgroundImage: AssetImage("assets/images/home4.png"),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.history, color: Colors.white),
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const HistoryScreen(),
+                          ),
+                        );
+                      },
+                      tooltip: 'View Interview History',
+                    ),
+                  ],
                 ),
               ),
               const SizedBox(height: 24),
 
-              // Field selection
+              // Field selection label
               const Text(
-                'Select Track:',
+                'Select Track',
                 style: TextStyle(
-                  fontSize: 16,
+                  fontSize: 18,
                   color: AppColors.lightText,
                   fontWeight: FontWeight.bold,
                 ),
               ),
               const SizedBox(height: 8),
+
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
@@ -115,18 +105,18 @@ class _FieldSelectionPageState extends State<FieldSelectionPage> {
                       );
                     }).toList(),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 32),
 
               if (selectedField != null) ...[
                 Text(
-                  'Select Technology${isMultiSelect ? ' (Multiple allowed)' : ''}:',
+                  'Select Technology${isMultiSelect ? ' (Multiple allowed)' : ''}',
                   style: const TextStyle(
-                    fontSize: 16,
+                    fontSize: 18,
                     fontWeight: FontWeight.bold,
                     color: Colors.white,
                   ),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 20),
                 Wrap(
                   spacing: 8,
                   runSpacing: 8,
@@ -162,19 +152,19 @@ class _FieldSelectionPageState extends State<FieldSelectionPage> {
                         );
                       }).toList(),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 40),
               ],
 
               if (selectedTechnologies.isNotEmpty) ...[
                 const Text(
-                  'Select Difficulty:',
+                  'Select Difficulty',
                   style: TextStyle(
-                    fontSize: 16,
+                    fontSize: 18,
                     fontWeight: FontWeight.bold,
                     color: Colors.white,
                   ),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 15),
                 Wrap(
                   spacing: 8,
                   runSpacing: 8,
@@ -206,6 +196,7 @@ class _FieldSelectionPageState extends State<FieldSelectionPage> {
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: GradientButton(
                   text: "Start",
+                  height: 75,
                   onPressed:
                       selectedField != null &&
                               selectedTechnologies.isNotEmpty &&

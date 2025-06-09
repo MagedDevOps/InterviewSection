@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/history_model.dart';
 import '../services/history_service.dart';
 import '../constants/colors.dart';
+import 'dart:ui'; // Import for ImageFilter
 
 class HistoryScreen extends StatefulWidget {
   const HistoryScreen({super.key});
@@ -47,19 +48,121 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 
   Future<void> _deleteInterview(String id) async {
-    try {
-      await _historyService.deleteInterview(id);
-      await _loadHistory();
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Interview deleted')));
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error deleting interview: $e')));
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            backgroundColor:
+                Colors.transparent, // Transparent background for AlertDialog
+            elevation: 0, // No shadow for transparent dialog
+            contentPadding: EdgeInsets.zero, // Remove default content padding
+            insetPadding: const EdgeInsets.all(
+              0,
+            ), // Remove default inset padding
+            actionsPadding: const EdgeInsets.all(
+              0,
+            ), // Remove default actions padding
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(
+                16,
+              ), // Rounded corners for ClipRRect
+            ),
+            content: ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(
+                  sigmaX: 0.5,
+                  sigmaY: 0.5,
+                ), // Blur effect
+                child: Container(
+                  width:
+                      MediaQuery.of(context).size.width *
+                      0.8, // Adjust width as needed
+                  decoration: BoxDecoration(
+                    color: AppColors.darkPurple.withOpacity(
+                      0.7,
+                    ), // Semi-transparent background
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: AppColors.primaryPurple,
+                      width: 2,
+                    ),
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 20,
+                  ), // Inner padding
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min, // Keep column compact
+                    children: [
+                      const Text(
+                        'Are you sure you want to delete?', // Simplified content text
+                        textAlign: TextAlign.center, // Center the text
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                        ), // Set content text color and size
+                      ),
+                      const SizedBox(
+                        height: 20,
+                      ), // Space between text and buttons
+                      Row(
+                        mainAxisAlignment:
+                            MainAxisAlignment
+                                .spaceEvenly, // Evenly space buttons
+                        children: [
+                          ElevatedButton(
+                            onPressed: () => Navigator.pop(context, false),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.white,
+                              foregroundColor: AppColors.darkPurple,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              minimumSize: const Size(95, 35),
+                            ),
+                            child: const Text('Cancel'),
+                          ),
+                          const SizedBox(
+                            width: 8,
+                          ), // Reduced space between buttons
+                          ElevatedButton(
+                            onPressed: () => Navigator.pop(context, true),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.primaryPurple,
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              minimumSize: const Size(95, 35),
+                            ),
+                            child: const Text('Delete'),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+    );
+
+    if (confirmed == true) {
+      try {
+        await _historyService.deleteInterview(id);
+        await _loadHistory();
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('Interview deleted')));
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error deleting interview: $e')),
+          );
+        }
       }
     }
   }
@@ -69,20 +172,78 @@ class _HistoryScreenState extends State<HistoryScreen> {
       context: context,
       builder:
           (context) => AlertDialog(
-            title: const Text('Clear History'),
-            content: const Text(
-              'Are you sure you want to clear all interview history?',
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            contentPadding: EdgeInsets.zero,
+            insetPadding: const EdgeInsets.all(0),
+            actionsPadding: const EdgeInsets.all(0),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
             ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('Cancel'),
+            content: ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 0.5, sigmaY: 0.5),
+                child: Container(
+                  width: MediaQuery.of(context).size.width * 0.8,
+                  decoration: BoxDecoration(
+                    color: AppColors.darkPurple.withOpacity(0.7),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: AppColors.primaryPurple,
+                      width: 2,
+                    ),
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 20,
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text(
+                        'Are you sure you want to delete?',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.white, fontSize: 16),
+                      ),
+                      const SizedBox(height: 20),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          ElevatedButton(
+                            onPressed: () => Navigator.pop(context, false),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.white,
+                              foregroundColor: AppColors.darkPurple,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              minimumSize: const Size(95, 35),
+                            ),
+                            child: const Text('Cancel'),
+                          ),
+                          const SizedBox(
+                            width: 8,
+                          ), // Reduced space between buttons
+                          ElevatedButton(
+                            onPressed: () => Navigator.pop(context, true),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.primaryPurple,
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              minimumSize: const Size(95, 35),
+                            ),
+                            child: const Text('Delete'),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
               ),
-              TextButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: const Text('Clear'),
-              ),
-            ],
+            ),
           ),
     );
 
@@ -110,12 +271,21 @@ class _HistoryScreenState extends State<HistoryScreen> {
     return Scaffold(
       backgroundColor: AppColors.primaryDark,
       appBar: AppBar(
-        title: const Text('Interview History'),
+        title: const Text(
+          'Interview History',
+          style: TextStyle(color: Colors.white),
+        ),
         backgroundColor: AppColors.darkPurple,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          onPressed: () {
+            Navigator.pop(context);
+          },
+        ),
         actions: [
           if (_history.isNotEmpty)
             IconButton(
-              icon: const Icon(Icons.delete_sweep),
+              icon: const Icon(Icons.delete_sweep, color: Colors.white),
               onPressed: _clearHistory,
               tooltip: 'Clear History',
             ),
@@ -241,7 +411,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
   Color _getScoreColor(int score) {
     if (score >= 80) return Colors.green;
-    if (score >= 50) return Colors.orange;
+    if (score >= 50) return Colors.amber;
     return Colors.red;
   }
 }

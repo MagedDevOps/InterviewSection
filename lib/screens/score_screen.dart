@@ -7,16 +7,13 @@ import '../utils/background_decorations.dart';
 
 class ScoreScreen extends StatelessWidget {
   final InterviewModel interviewModel;
-  
-  const ScoreScreen({
-    super.key,
-    required this.interviewModel,
-  });
+
+  const ScoreScreen({super.key, required this.interviewModel});
 
   // Get color based on score
   Color _getScoreColor(int score) {
     if (score >= 80) return Colors.green;
-    if (score >= 60) return Colors.orange;
+    if (score >= 60) return Colors.amber;
     return Colors.red;
   }
 
@@ -72,7 +69,7 @@ class ScoreScreen extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 24),
-                  
+
                   // Overall score card
                   Container(
                     padding: const EdgeInsets.all(20),
@@ -108,7 +105,9 @@ class ScoreScreen extends StatelessWidget {
                                 value: interviewModel.overallScore / 100,
                                 strokeWidth: 12,
                                 backgroundColor: Colors.grey.withOpacity(0.3),
-                                valueColor: AlwaysStoppedAnimation<Color>(_getScoreColor(interviewModel.overallScore)),
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  _getScoreColor(interviewModel.overallScore),
+                                ),
                               ),
                             ),
                             Column(
@@ -145,7 +144,7 @@ class ScoreScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 24),
-                  
+
                   // Question details
                   const Align(
                     alignment: Alignment.centerLeft,
@@ -159,7 +158,7 @@ class ScoreScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  
+
                   // List of questions with scores
                   Expanded(
                     child: ListView.builder(
@@ -172,9 +171,10 @@ class ScoreScreen extends StatelessWidget {
                             color: AppColors.darkPurple,
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(
-                              color: question.score != null
-                                  ? _getScoreColor(question.score!)
-                                  : Colors.grey,
+                              color:
+                                  question.score != null
+                                      ? _getScoreColor(question.score!)
+                                      : Colors.grey,
                               width: 1,
                             ),
                           ),
@@ -201,7 +201,10 @@ class ScoreScreen extends StatelessWidget {
                                 ),
                                 if (question.score != null)
                                   Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 4,
+                                    ),
                                     decoration: BoxDecoration(
                                       color: _getScoreColor(question.score!),
                                       borderRadius: BorderRadius.circular(12),
@@ -232,10 +235,12 @@ class ScoreScreen extends StatelessWidget {
                                     const SizedBox(height: 4),
                                     Text(
                                       question.question,
-                                      style: const TextStyle(color: Colors.white),
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                      ),
                                     ),
                                     const SizedBox(height: 12),
-                                    if (question.feedback != null) ...[                                      
+                                    if (question.feedback != null) ...[
                                       const Text(
                                         'Feedback:',
                                         style: TextStyle(
@@ -246,7 +251,9 @@ class ScoreScreen extends StatelessWidget {
                                       const SizedBox(height: 4),
                                       Text(
                                         question.feedback!,
-                                        style: const TextStyle(color: Colors.white),
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                        ),
                                       ),
                                     ],
                                   ],

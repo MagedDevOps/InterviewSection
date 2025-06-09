@@ -18,6 +18,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/history_service.dart';
 import '../models/history_model.dart';
+import '../widgets/gradient_button.dart';
 
 class InterviewScreen extends StatefulWidget {
   final String field;
@@ -38,7 +39,8 @@ class InterviewScreen extends StatefulWidget {
 class _InterviewScreenState extends State<InterviewScreen>
     with SingleTickerProviderStateMixin {
   int seconds = 59;
-  int minutes = 0; // Changed to 1 minute per question
+  int minutes =
+      1; // Changed to 2 minutes per question (initialized as 1 minute)
   late Timer timer;
   late AnimationController _waveformController;
   late Animation<double> _waveformAnimation;
@@ -656,7 +658,7 @@ class _InterviewScreenState extends State<InterviewScreen>
       setState(() {
         _interviewModel!.nextQuestion();
         // Reset timer for the new question
-        minutes = 0;
+        minutes = 1;
         seconds = 59;
         _isTimeUp = false;
         _transcribedText = ''; // Clear transcribed text
@@ -665,6 +667,9 @@ class _InterviewScreenState extends State<InterviewScreen>
         // Speak the new question
         _speakQuestion(_interviewModel!.currentQuestion.question);
       });
+      // Restart the timer for the new question
+      timer.cancel(); // Cancel the old timer
+      startTimer(); // Start a new timer
     } else {
       _finishInterview();
     }
@@ -1097,7 +1102,7 @@ class _InterviewScreenState extends State<InterviewScreen>
                                           ],
                                         ),
                                       ),
-                                      const SizedBox(height: 24),
+                                      const SizedBox(height: 16),
                                     ],
                                   ],
                                 ),
@@ -1161,6 +1166,9 @@ class _InterviewScreenState extends State<InterviewScreen>
 
                               // Action buttons
                               if (!kIsWeb) ...[
+                                const SizedBox(
+                                  height: 0,
+                                ), // Adjusted spacing before action buttons to move button up
                                 Row(
                                   mainAxisAlignment:
                                       MainAxisAlignment.spaceEvenly,
@@ -1170,80 +1178,41 @@ class _InterviewScreenState extends State<InterviewScreen>
                                             .score !=
                                         null) ...[
                                       Expanded(
-                                        child: ElevatedButton.icon(
+                                        child: GradientButton(
+                                          text:
+                                              _interviewModel!.hasNextQuestion
+                                                  ? 'Next Question'
+                                                  : 'Finish Interview',
+                                          height: 75,
+                                          icon: Icons.navigate_next,
+                                          isLoading: _isButtonLoading,
                                           onPressed:
                                               _isButtonLoading
                                                   ? null
                                                   : _nextQuestion,
-                                          icon:
-                                              _isButtonLoading
-                                                  ? const SizedBox(
-                                                    width: 16,
-                                                    height: 16,
-                                                    child:
-                                                        CircularProgressIndicator(
-                                                          color: Colors.white,
-                                                          strokeWidth: 2,
-                                                        ),
-                                                  )
-                                                  : const Icon(
-                                                    Icons.navigate_next,
-                                                  ),
-                                          label: Text(
-                                            _interviewModel!.hasNextQuestion
-                                                ? 'Next Question'
-                                                : 'Finish Interview',
-                                          ),
-                                          style: ElevatedButton.styleFrom(
-                                            backgroundColor:
-                                                AppColors.primaryPurple,
-                                            foregroundColor: Colors.white,
-                                            padding: const EdgeInsets.symmetric(
-                                              vertical: 12,
-                                            ),
-                                          ),
                                         ),
                                       ),
                                     ] else ...[
                                       Expanded(
-                                        child: ElevatedButton.icon(
+                                        child: GradientButton(
+                                          text:
+                                              _isRecording
+                                                  ? 'Stop Recording'
+                                                  : 'Start Recording',
+                                          height: 75,
+                                          icon:
+                                              _isRecording
+                                                  ? Icons.stop
+                                                  : Icons.mic,
+                                          dynamicBackgroundColor:
+                                              _isRecording ? Colors.red : null,
+                                          isLoading: _isButtonLoading,
                                           onPressed:
                                               _isButtonLoading
                                                   ? null
                                                   : (_isRecording
                                                       ? _stopRecording
                                                       : _startRecording),
-                                          icon:
-                                              _isButtonLoading
-                                                  ? const SizedBox(
-                                                    width: 16,
-                                                    height: 16,
-                                                    child:
-                                                        CircularProgressIndicator(
-                                                          color: Colors.white,
-                                                          strokeWidth: 2,
-                                                        ),
-                                                  )
-                                                  : Icon(
-                                                    _isRecording
-                                                        ? Icons.stop
-                                                        : Icons.mic,
-                                                  ),
-                                          label: Text(
-                                            _isRecording
-                                                ? 'Stop Recording'
-                                                : 'Start Recording',
-                                          ),
-                                          style: ElevatedButton.styleFrom(
-                                            backgroundColor:
-                                                _isRecording
-                                                    ? Colors.red
-                                                    : AppColors.primaryPurple,
-                                            foregroundColor: Colors.white,
-                                            padding: const EdgeInsets.symmetric(
-                                              vertical: 12,
-                                            ),
-                                          ),
                                         ),
                                       ),
                                       const SizedBox(width: 8),
@@ -1253,14 +1222,24 @@ class _InterviewScreenState extends State<InterviewScreen>
                                               _isButtonLoading
                                                   ? null
                                                   : _skipQuestion,
-                                          icon: const Icon(Icons.skip_next),
-                                          label: const Text('Skip Question'),
+                                          icon: const Icon(
+                                            Icons.skip_next,
+                                            color: Colors.white,
+                                          ),
+                                          label: const Text(
+                                            'Skip Question',
+                                            style: TextStyle(fontSize: 16),
+                                          ),
                                           style: ElevatedButton.styleFrom(
                                             backgroundColor:
                                                 AppColors.darkPurple,
                                             foregroundColor: Colors.white,
                                             padding: const EdgeInsets.symmetric(
                                               vertical: 12,
+                                            ),
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(12),
                                             ),
                                           ),
                                         ),
@@ -1286,7 +1265,7 @@ class _InterviewScreenState extends State<InterviewScreen>
     if (score >= 80) {
       return Colors.green;
     } else if (score >= 50) {
-      return Colors.orange;
+      return Colors.amber;
     } else {
       return Colors.red;
     }
