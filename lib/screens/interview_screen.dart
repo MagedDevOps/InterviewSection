@@ -5,14 +5,19 @@ import 'dart:async';
 import 'package:record/record.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter_tts/flutter_tts.dart'; // Added for text-to-speech
-import 'package:speech_to_text/speech_to_text.dart' as stt;
+import 'package:path_provider/path_provider.dart';
+import 'dart:io';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 import '../constants/colors.dart';
 import '../utils/background_decorations.dart';
 import '../models/interview_model.dart';
 import '../services/fixed_api_service.dart';
 import 'score_screen.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'dart:io' show Platform;
+import 'package:shared_preferences/shared_preferences.dart';
+import '../services/history_service.dart';
+import '../models/history_model.dart';
 
 class InterviewScreen extends StatefulWidget {
   final String field;
@@ -55,8 +60,11 @@ class _InterviewScreenState extends State<InterviewScreen>
   String _statusMessage = 'Loading questions...';
   bool _hasError = false;
 
-  // Speech to text
-  final stt.SpeechToText _speech = stt.SpeechToText();
+  // Add new variables for AssemblyAI
+  static const String _assemblyAiApiKey = 'f215bd2071b44a1586075e12c725c15f';
+  static const String _assemblyAiBaseUrl = 'https://api.assemblyai.com/v2';
+  Timer? _transcriptionPollingTimer;
+  String? _currentTranscriptionId;
   bool _isListening = false;
   String _transcribedText = '';
 
@@ -67,9 +75,9 @@ class _InterviewScreenState extends State<InterviewScreen>
   @override
   void initState() {
     super.initState();
+    _initializeAudioRecorder();
     _initWaveformAnimation();
     _setupTextToSpeech();
-    _initSpeechToText();
     _requestPermissions();
     _loadInterviewQuestions();
     _loadingTimeoutTimer = Timer(const Duration(seconds: 15), () {
@@ -84,11 +92,42 @@ class _InterviewScreenState extends State<InterviewScreen>
     });
   }
 
+  Future<void> _initializeAudioRecorder() async {
+    try {
+      // Check if microphone is available
+      final hasPermission = await _audioRecorder.hasPermission();
+      if (!hasPermission) {
+        print('Microphone permission not granted');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Microphone permission is required for recording'),
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
+        return;
+      }
+
+      print('Audio recorder initialized successfully');
+    } catch (e) {
+      print('Error initializing audio recorder: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error initializing audio recorder: $e'),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
+  }
+
   // Setup text to speech with male voice
   Future<void> _setupTextToSpeech() async {
     await _flutterTts.setLanguage('en-US');
-    await _flutterTts.setSpeechRate(1);
-    await _flutterTts.setVolume(0.7);
+    await _flutterTts.setSpeechRate(0.4);
+    await _flutterTts.setVolume(0.8);
     await _flutterTts.setPitch(0.9); // Lower pitch for male voice
 
     // Set up completion listener
@@ -116,83 +155,53 @@ class _InterviewScreenState extends State<InterviewScreen>
     await _flutterTts.speak(question);
   }
 
-  // Initialize speech to text
-  Future<void> _initSpeechToText() async {
-    if (kIsWeb) {
-      // Show a message or use a web alternative
-      return;
-    }
-    bool available = await _speech.initialize(
-      onError: (error) => print('Speech to text error: $error'),
-      onStatus: (status) => print('Speech to text status: $status'),
-    );
-    if (!available) {
-      print('Speech to text not available');
-    }
-  }
+  // Request permissions
+  Future<void> _requestPermissions() async {
+    try {
+      // Request microphone permission first
+      final micStatus = await Permission.microphone.request();
+      if (!micStatus.isGranted) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Microphone permission is required for speech recognition',
+              ),
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
+        return;
+      }
 
-  // Start listening for speech
-  Future<void> _startListening() async {
-    if (kIsWeb) {
-      // Show a message or use a web alternative
-      return;
-    }
-    if (!_isListening) {
-      bool available = await _speech.initialize();
-      if (available) {
-        setState(() {
-          _isListening = true;
-          _transcribedText = '';
-        });
-        _speech.listen(
-          onResult: (result) {
-            setState(() {
-              _transcribedText = result.recognizedWords;
-            });
-          },
-          localeId: 'en_US',
+      // Then request storage permission
+      final storageStatus = await Permission.storage.request();
+      if (!storageStatus.isGranted) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Storage permission is required for saving recordings',
+              ),
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
+        return;
+      }
+
+      // Initialize speech recognition after permissions are granted
+      await _startListening();
+    } catch (e) {
+      print('Error requesting permissions: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error requesting permissions: $e'),
+            duration: const Duration(seconds: 3),
+          ),
         );
       }
-    }
-  }
-
-  // Stop listening for speech
-  Future<void> _stopListening() async {
-    if (kIsWeb) {
-      // Show a message or use a web alternative
-      return;
-    }
-    if (_isListening) {
-      await _speech.stop();
-      setState(() {
-        _isListening = false;
-      });
-    }
-  }
-
-  // Request all necessary permissions
-  Future<void> _requestPermissions() async {
-    if (kIsWeb) {
-      // Show a message or use a web alternative
-      return;
-    }
-    await [Permission.microphone, Permission.storage].request();
-  }
-
-  // Check if microphone permission is granted
-  Future<bool> _checkMicPermission() async {
-    if (kIsWeb) {
-      // Show a message or use a web alternative
-      return false;
-    }
-    final status = await Permission.microphone.status;
-
-    if (status.isGranted) {
-      return true;
-    } else {
-      // Request permission again with proper error handling
-      final result = await Permission.microphone.request();
-      return result.isGranted;
     }
   }
 
@@ -263,106 +272,302 @@ class _InterviewScreenState extends State<InterviewScreen>
   }
 
   Future<String> _getAudioFilePath() async {
-    if (kIsWeb) {
-      throw UnsupportedError('Audio recording is not supported on web.');
+    // For Android, use the external storage directory
+    final directory = await getExternalStorageDirectory();
+    if (directory == null) {
+      throw Exception('Could not access external storage');
     }
-    // Use a simple timestamp-based filename
-    return 'recording_${DateTime.now().millisecondsSinceEpoch}.aac';
+
+    final recordingsDir = Directory('${directory.path}/recordings');
+    if (!await recordingsDir.exists()) {
+      await recordingsDir.create(recursive: true);
+    }
+
+    return '${recordingsDir.path}/recording_${DateTime.now().millisecondsSinceEpoch}.aac';
   }
 
+  // Start listening for speech
+  Future<void> _startListening() async {
+    if (!_isListening) {
+      try {
+        // Check microphone permission first
+        final micStatus = await Permission.microphone.status;
+        if (!micStatus.isGranted) {
+          final result = await Permission.microphone.request();
+          if (!result.isGranted) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text(
+                    'Microphone permission is required for speech recognition',
+                  ),
+                  duration: Duration(seconds: 3),
+                ),
+              );
+            }
+            return;
+          }
+        }
+
+        setState(() {
+          _isListening = true;
+          _transcribedText = '';
+        });
+
+        // Start polling for transcription results
+        _startTranscriptionPolling();
+      } catch (e) {
+        print('Speech recognition error: $e');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Please try speaking again'),
+              duration: Duration(seconds: 2),
+            ),
+          );
+          setState(() {
+            _isListening = false;
+          });
+        }
+      }
+    }
+  }
+
+  // Stop listening for speech
+  Future<void> _stopListening() async {
+    if (_isListening) {
+      try {
+        _transcriptionPollingTimer?.cancel();
+        setState(() {
+          _isListening = false;
+        });
+      } catch (e) {
+        print('Error stopping speech recognition: $e');
+        setState(() {
+          _isListening = false;
+        });
+      }
+    }
+  }
+
+  // Start polling for transcription results
+  void _startTranscriptionPolling() {
+    _transcriptionPollingTimer?.cancel();
+    _transcriptionPollingTimer = Timer.periodic(const Duration(seconds: 3), (
+      timer,
+    ) async {
+      if (!_isListening) {
+        timer.cancel();
+        return;
+      }
+
+      try {
+        if (_currentTranscriptionId != null) {
+          final response = await http.get(
+            Uri.parse(
+              '$_assemblyAiBaseUrl/transcript/$_currentTranscriptionId',
+            ),
+            headers: {'authorization': _assemblyAiApiKey},
+          );
+
+          if (response.statusCode == 200) {
+            final result = json.decode(response.body);
+            if (result['status'] == 'completed') {
+              setState(() {
+                _transcribedText = result['text'] ?? '';
+              });
+              timer.cancel();
+            } else if (result['status'] == 'error') {
+              print('Transcription error: ${result['error']}');
+              timer.cancel();
+            }
+          }
+        }
+      } catch (e) {
+        print('Error polling transcription: $e');
+      }
+    });
+  }
+
+  // Start recording audio
   Future<void> _startRecording() async {
-    if (kIsWeb) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Recording is not supported on web.')),
-      );
-      return;
-    }
-    // Debounce rapid taps
-    final now = DateTime.now();
-    if (_lastRecordTap != null &&
-        now.difference(_lastRecordTap!) < const Duration(seconds: 1)) {
-      return;
-    }
-    _lastRecordTap = now;
-    setState(() => _isButtonLoading = true);
     try {
-      bool hasPermission = await _checkMicPermission();
+      // Check microphone permission first
+      final micStatus = await Permission.microphone.status;
+      if (!micStatus.isGranted) {
+        final result = await Permission.microphone.request();
+        if (!result.isGranted) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                  'Microphone permission is required for recording',
+                ),
+                duration: Duration(seconds: 3),
+              ),
+            );
+          }
+          return;
+        }
+      }
+
+      // Check if microphone is available
+      final hasPermission = await _audioRecorder.hasPermission();
       if (!hasPermission) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text(
-                'Microphone permission denied. Please enable it in app settings.',
-              ),
+              content: Text('Microphone permission is required for recording'),
               duration: Duration(seconds: 3),
             ),
           );
         }
-        setState(() => _isButtonLoading = false);
         return;
       }
-      if (_isSpeaking) {
-        await _flutterTts.stop();
-        if (mounted)
-          setState(() {
-            _isSpeaking = false;
-          });
-      }
-      await _startListening();
-      final path = await _getAudioFilePath();
+
+      final directory = await getApplicationDocumentsDirectory();
+      final path = '${directory.path}/recordings';
+      await Directory(path).create(recursive: true);
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final filePath = '$path/recording_$timestamp.aac';
+
+      print('Starting recording to: $filePath');
+
+      // Configure audio recording
       await _audioRecorder.start(
         const RecordConfig(
           encoder: AudioEncoder.aacLc,
           bitRate: 128000,
           sampleRate: 44100,
+          numChannels: 1,
         ),
-        path: path,
+        path: filePath,
       );
-      if (!mounted) return;
+
       setState(() {
         _isRecording = true;
-        _currentRecordingPath = path;
-        _isButtonLoading = false;
+        _currentRecordingPath = filePath;
       });
-      _startWaveformUpdate();
+
+      // Start speech recognition after recording starts
+      await _startListening();
     } catch (e) {
-      print('Recording error: $e');
+      print('Error starting recording: $e');
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error starting recording: $e')));
-        setState(() => _isButtonLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error starting recording: $e'),
+            duration: const Duration(seconds: 3),
+          ),
+        );
       }
     }
   }
 
+  // Stop recording audio
   Future<void> _stopRecording() async {
-    if (kIsWeb) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Recording is not supported on web.')),
-      );
-      return;
-    }
-    setState(() => _isButtonLoading = true);
     try {
-      final path = await _audioRecorder.stop();
-      await _stopListening();
-      if (!mounted) return;
-      setState(() {
-        _isRecording = false;
-        _isButtonLoading = false;
-      });
-      _stopWaveformUpdate();
-      print('Recording saved to: $path');
-      if (_interviewModel != null && path != null) {
-        await _evaluateAnswer(path);
+      if (_isRecording) {
+        print('Stopping recording...');
+        await _audioRecorder.stop();
+        setState(() {
+          _isRecording = false;
+        });
+        print('Recording saved to: $_currentRecordingPath');
+
+        // Upload the recording to AssemblyAI
+        if (_currentRecordingPath != null) {
+          final file = File(_currentRecordingPath!);
+          if (!await file.exists()) {
+            print(
+              'Error: Recording file does not exist at $_currentRecordingPath',
+            );
+            return;
+          }
+
+          print('Reading recording file...');
+          final bytes = await file.readAsBytes();
+          print('File size: ${bytes.length} bytes');
+
+          print('Uploading to AssemblyAI...');
+          final uploadResponse = await http.post(
+            Uri.parse('$_assemblyAiBaseUrl/upload'),
+            headers: {'authorization': _assemblyAiApiKey},
+            body: bytes,
+          );
+
+          if (uploadResponse.statusCode == 200) {
+            final uploadResult = json.decode(uploadResponse.body);
+            final audioUrl = uploadResult['upload_url'];
+            print('Upload successful. Audio URL: $audioUrl');
+
+            // Start transcription
+            print('Starting transcription...');
+            final transcriptionResponse = await http.post(
+              Uri.parse('$_assemblyAiBaseUrl/transcript'),
+              headers: {
+                'authorization': _assemblyAiApiKey,
+                'content-type': 'application/json',
+              },
+              body: json.encode({
+                'audio_url': audioUrl,
+                'speech_model': 'universal',
+              }),
+            );
+
+            if (transcriptionResponse.statusCode == 200) {
+              final transcriptionResult = json.decode(
+                transcriptionResponse.body,
+              );
+              _currentTranscriptionId = transcriptionResult['id'];
+              print('Transcription started. ID: $_currentTranscriptionId');
+
+              // Wait for transcription to complete
+              bool isCompleted = false;
+              while (!isCompleted) {
+                await Future.delayed(const Duration(seconds: 2));
+                final statusResponse = await http.get(
+                  Uri.parse(
+                    '$_assemblyAiBaseUrl/transcript/$_currentTranscriptionId',
+                  ),
+                  headers: {'authorization': _assemblyAiApiKey},
+                );
+
+                if (statusResponse.statusCode == 200) {
+                  final statusResult = json.decode(statusResponse.body);
+                  if (statusResult['status'] == 'completed') {
+                    setState(() {
+                      _transcribedText = statusResult['text'] ?? '';
+                    });
+                    isCompleted = true;
+
+                    // Evaluate the answer after transcription is complete
+                    await _evaluateAnswer(_currentRecordingPath!);
+                  } else if (statusResult['status'] == 'error') {
+                    print('Transcription error: ${statusResult['error']}');
+                    break;
+                  }
+                }
+              }
+            } else {
+              print(
+                'Error starting transcription: ${transcriptionResponse.body}',
+              );
+            }
+          } else {
+            print('Error uploading file: ${uploadResponse.body}');
+          }
+        }
       }
     } catch (e) {
+      print('Error stopping recording: $e');
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error stopping recording: $e')));
-        setState(() => _isButtonLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error stopping recording: $e'),
+            duration: const Duration(seconds: 3),
+          ),
+        );
       }
     }
   }
@@ -454,6 +659,8 @@ class _InterviewScreenState extends State<InterviewScreen>
         minutes = 0;
         seconds = 59;
         _isTimeUp = false;
+        _transcribedText = ''; // Clear transcribed text
+        _currentRecordingPath = null; // Clear recording path
 
         // Speak the new question
         _speakQuestion(_interviewModel!.currentQuestion.question);
@@ -464,18 +671,59 @@ class _InterviewScreenState extends State<InterviewScreen>
   }
 
   // Finish the interview and navigate to the score screen
-  void _finishInterview() {
+  Future<void> _finishInterview() async {
     if (_interviewModel == null) return;
 
     // Stop TTS if it's speaking
     if (_isSpeaking) {
-      _flutterTts.stop();
+      await _flutterTts.stop();
     }
 
     setState(() {
       _interviewModel!.isCompleted = true;
     });
 
+    // Save interview to history
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final historyService = HistoryService(prefs);
+
+      // Calculate total score
+      final totalScore =
+          _interviewModel!.questions.fold<int>(
+            0,
+            (sum, question) => sum + (question.score ?? 0),
+          ) ~/
+          _interviewModel!.questions.length;
+
+      // Create interview history
+      final interviewHistory = InterviewHistory(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        field: widget.field,
+        technologies: widget.technologies,
+        difficulty: widget.difficulty,
+        date: DateTime.now(),
+        totalScore: totalScore,
+        questions:
+            _interviewModel!.questions
+                .map(
+                  (q) => QuestionHistory(
+                    question: q.question,
+                    answer: q.answer ?? '',
+                    score: q.score ?? 0,
+                    feedback: q.feedback ?? '',
+                  ),
+                )
+                .toList(),
+      );
+
+      // Save to history
+      await historyService.saveInterview(interviewHistory);
+    } catch (e) {
+      print('Error saving interview history: $e');
+    }
+
+    if (!mounted) return;
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(
@@ -512,7 +760,7 @@ class _InterviewScreenState extends State<InterviewScreen>
     _audioRecorder.dispose();
     _flutterTts.stop();
     _flutterTts.setCompletionHandler(() {});
-    _speech.stop();
+    _transcriptionPollingTimer?.cancel();
     _loadingTimeoutTimer?.cancel();
     super.dispose();
   }
@@ -730,6 +978,49 @@ class _InterviewScreenState extends State<InterviewScreen>
                                       ),
                                     ),
                                     const SizedBox(height: 24),
+
+                                    // Answer display
+                                    Card(
+                                      elevation: 4,
+                                      child: Padding(
+                                        padding: const EdgeInsets.all(16),
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            const Text(
+                                              'Your Answer:',
+                                              style: TextStyle(
+                                                fontSize: 16,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 8),
+                                            Container(
+                                              width: double.infinity,
+                                              padding: const EdgeInsets.all(12),
+                                              decoration: BoxDecoration(
+                                                color: Colors.grey[200],
+                                                borderRadius:
+                                                    BorderRadius.circular(8),
+                                              ),
+                                              child: Text(
+                                                _transcribedText.isEmpty
+                                                    ? 'Your answer will appear here...'
+                                                    : _transcribedText,
+                                                style: TextStyle(
+                                                  fontSize: 16,
+                                                  color:
+                                                      _transcribedText.isEmpty
+                                                          ? Colors.grey[600]
+                                                          : Colors.black,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
 
                                     // Evaluation results if available
                                     if (_interviewModel!

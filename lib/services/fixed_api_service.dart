@@ -8,13 +8,19 @@ class FixedApiService {
 
   // API key - in production, use secure storage
   static const String _apiKey =
-      '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';
+      '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';
 
   // Default model to use
   static const String _defaultModel = 'openai/gpt-3.5-turbo';
 
   // Add a max tokens parameter to limit response size
   static const int _maxTokens = 2048; // Reduced from default 3072
+
+  static const Duration _timeout = Duration(seconds: 30);
+  static const int _maxRetries = 3;
+
+  static final Map<String, List<String>> _questionCache = {};
+  static final Map<String, Map<String, dynamic>> _evaluationCache = {};
 
   // Helper method to recursively find questions in a map structure
   static void _findQuestionsInMap(dynamic data, List<String> questions) {
@@ -44,134 +50,102 @@ class FixedApiService {
     required String difficulty,
     int numberOfQuestions = 5,
   }) async {
-    try {
-      final String techString = technologies.join(', ');
+    final cacheKey =
+        '$field-${technologies.join('-')}-$difficulty-$numberOfQuestions';
 
-      // Simplified prompt to generate valid JSON array
-      final prompt = """
-        Generate $numberOfQuestions technical interview questions for a $difficulty-level $field developer skilled in $techString. Return only a JSON array of questions, no explanations or extra text.
-      """;
+    // Check cache first
+    if (_questionCache.containsKey(cacheKey)) {
+      return _questionCache[cacheKey]!;
+    }
 
-      final response = await http.post(
-        Uri.parse(_baseUrl),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $_apiKey',
-          'HTTP-Referer': 'https://interview-service.app',
-        },
-        body: jsonEncode({
-          'model': _defaultModel,
-          'messages': [
-            {
-              'role': 'system',
-              'content':
-                  'You are a helpful assistant. Only output a JSON array of questions.',
-            },
-            {'role': 'user', 'content': prompt},
-          ],
-          'response_format': {'type': 'json_object'},
-          'max_tokens': _maxTokens,
-        }),
-      );
+    int retryCount = 0;
+    while (retryCount < _maxRetries) {
+      try {
+        final String techString = technologies.join(', ');
+        final prompt = """
+          Generate $numberOfQuestions technical interview questions for a $difficulty-level $field developer skilled in $techString. Return only a JSON array of questions, no explanations or extra text.
+        """;
 
-      if (response.statusCode == 200) {
-        final jsonResponse = jsonDecode(response.body);
-        print('Raw API response: ${response.body}');
+        final response = await http
+            .post(
+              Uri.parse(_baseUrl),
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer $_apiKey',
+                'HTTP-Referer': 'https://interview-service.app',
+              },
+              body: jsonEncode({
+                'model': _defaultModel,
+                'messages': [
+                  {
+                    'role': 'system',
+                    'content':
+                        'You are a helpful assistant. Only output a JSON array of questions.',
+                  },
+                  {'role': 'user', 'content': prompt},
+                ],
+                'response_format': {'type': 'json_object'},
+                'max_tokens': _maxTokens,
+              }),
+            )
+            .timeout(_timeout);
 
-        // Safely extract content from the response
-        if (jsonResponse.containsKey('choices') &&
-            jsonResponse['choices'] is List &&
-            jsonResponse['choices'].isNotEmpty &&
-            jsonResponse['choices'][0].containsKey('message') &&
-            jsonResponse['choices'][0]['message'].containsKey('content')) {
-          final content = jsonResponse['choices'][0]['message']['content'];
-          print('Raw API response content: $content');
+        if (response.statusCode == 200) {
+          final jsonResponse = jsonDecode(response.body);
+          final questions = _extractQuestions(jsonResponse);
 
-          try {
-            if (content.trim().isEmpty) {
-              throw Exception('Empty response content from API');
-            }
-
-            // Parse the content as JSON
-            dynamic parsedContent = jsonDecode(content);
-            print('Parsed content type: ${parsedContent.runtimeType}');
-
-            // Handle different response formats
-            if (parsedContent is Map &&
-                parsedContent.containsKey('questions')) {
-              // Extract the questions array from the map
-              final questionsList = parsedContent['questions'];
-              if (questionsList is List) {
-                return questionsList.map((q) => q.toString()).toList();
-              }
-            } else if (parsedContent is List) {
-              // Direct array of questions - perfect!
-              return parsedContent.map((q) => q.toString()).toList();
-            } else if (parsedContent is Map) {
-              // Extract questions from the map
-              final List<String> extractedQuestions = [];
-              _findQuestionsInMap(parsedContent, extractedQuestions);
-              if (extractedQuestions.isNotEmpty) {
-                return extractedQuestions;
-              }
-              // If we still have no questions, look for any string that ends with '?'
-              final allValues = parsedContent.values.toList();
-              final questionStrings =
-                  allValues
-                      .whereType<String>()
-                      .where((s) => s.trim().endsWith('?'))
-                      .toList();
-              if (questionStrings.isNotEmpty) {
-                return questionStrings;
-              }
-            }
-
-            // If we couldn't parse as expected, check for question marks in the raw content
-            final questionRegex = RegExp(r'([^.!?]+\?)', multiLine: true);
-            final matches = questionRegex.allMatches(content);
-            if (matches.isNotEmpty) {
-              return matches
-                  .map((m) => m.group(0)!)
-                  .map((s) => s.trim())
-                  .toList();
-            }
-
-            print('Failed to extract questions from response: $parsedContent');
-            return _getDefaultQuestions(field, technologies);
-          } catch (e) {
-            print('Error parsing API response: $e');
-
-            // If JSON parsing fails, try to extract questions with regex
-            final questionRegex = RegExp(r'([^.!?]+\?)', multiLine: true);
-            final matches = questionRegex.allMatches(content);
-            if (matches.isNotEmpty) {
-              return matches
-                  .map((m) => m.group(0)!)
-                  .map((s) => s.trim())
-                  .toList();
-            }
-
+          // Cache the successful response
+          _questionCache[cacheKey] = questions;
+          return questions;
+        } else if (response.statusCode == 402) {
+          print('Credit limit exceeded: ${response.body}');
+          return _getDefaultQuestions(
+            field,
+            technologies,
+            isApiLimitError: true,
+          );
+        } else {
+          retryCount++;
+          if (retryCount == _maxRetries) {
             return _getDefaultQuestions(field, technologies);
           }
-        } else {
-          print('Invalid response structure from API: $jsonResponse');
+          await Future.delayed(Duration(seconds: 1 * retryCount));
+        }
+      } catch (e) {
+        retryCount++;
+        if (retryCount == _maxRetries) {
+          print('Error generating questions after $retryCount retries: $e');
           return _getDefaultQuestions(field, technologies);
         }
-      } else if (response.statusCode == 402) {
-        // Handle the credit limit exceeded error specifically
-        print('Credit limit exceeded: ${response.body}');
-        // Return fallback questions but also log the specific error
-        return _getDefaultQuestions(field, technologies, isApiLimitError: true);
-      } else {
-        print(
-          'Failed to generate questions: ${response.statusCode}, ${response.body}',
-        );
-        return _getDefaultQuestions(field, technologies);
+        await Future.delayed(Duration(seconds: 1 * retryCount));
       }
-    } catch (e) {
-      print('Error generating questions: $e');
-      return _getDefaultQuestions(field, technologies);
     }
+    return _getDefaultQuestions(field, technologies);
+  }
+
+  static List<String> _extractQuestions(dynamic jsonResponse) {
+    if (jsonResponse.containsKey('choices') &&
+        jsonResponse['choices'] is List &&
+        jsonResponse['choices'].isNotEmpty &&
+        jsonResponse['choices'][0].containsKey('message') &&
+        jsonResponse['choices'][0]['message'].containsKey('content')) {
+      final content = jsonResponse['choices'][0]['message']['content'];
+      try {
+        final parsedContent = jsonDecode(content);
+        if (parsedContent is List) {
+          return parsedContent.map((q) => q.toString()).toList();
+        } else if (parsedContent is Map &&
+            parsedContent.containsKey('questions')) {
+          final questionsList = parsedContent['questions'];
+          if (questionsList is List) {
+            return questionsList.map((q) => q.toString()).toList();
+          }
+        }
+      } catch (e) {
+        print('Error parsing questions: $e');
+      }
+    }
+    return _getDefaultQuestions('', []);
   }
 
   // Helper method to provide default questions
@@ -199,148 +173,108 @@ class FixedApiService {
     required List<String> technologies,
     required String difficulty,
   }) async {
-    try {
-      final String techString = technologies.join(', ');
+    final cacheKey =
+        '$question-$answer-$field-${technologies.join('-')}-$difficulty';
 
-      // Simplified prompt to reduce token usage
-      final prompt = """
-      You are an expert technical interviewer. Evaluate the following
-       $field interview answer related to $techString.
+    // Check cache first
+    if (_evaluationCache.containsKey(cacheKey)) {
+      return _evaluationCache[cacheKey]!;
+    }
 
-      Question:
-      $question
+    int retryCount = 0;
+    while (retryCount < _maxRetries) {
+      try {
+        final response = await http
+            .post(
+              Uri.parse(_baseUrl),
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer $_apiKey',
+                'HTTP-Referer': 'https://interview-service.app',
+              },
+              body: jsonEncode({
+                'model': _defaultModel,
+                'messages': [
+                  {
+                    'role': 'system',
+                    'content':
+                        'You are an expert technical interviewer. Evaluate the answer and provide a score (0-100) and feedback.',
+                  },
+                  {
+                    'role': 'user',
+                    'content':
+                        'Question: $question\nAnswer: $answer\nField: $field\nTechnologies: ${technologies.join(", ")}\nDifficulty: $difficulty\nEvaluate the answer and provide a JSON response with "score" (0-100) and "feedback" fields.',
+                  },
+                ],
+                'response_format': {'type': 'json_object'},
+                'max_tokens': _maxTokens,
+              }),
+            )
+            .timeout(_timeout);
 
-      Candidate's Answer:
-      $answer
+        if (response.statusCode == 200) {
+          final jsonResponse = jsonDecode(response.body);
+          final evaluation = _extractEvaluation(jsonResponse);
 
-      Evaluation Criteria:
-      - Assess the technical correctness, clarity, and depth of understanding.
-      - Check if the answer demonstrates practical knowledge and relevance to real-world applications.
-      - Penalize for inaccuracies, vagueness, or missing key points.
-      - Consider communication skills only if they affect technical clarity.
-
-      Return your evaluation as a JSON object with the following format:
-      {
-        "score": 0-100, 
-        "feedback": "Concise, constructive, and technical feedback"
-      }
-      Only output valid JSON with no extra commentary.
-      """;
-
-      final response = await http.post(
-        Uri.parse(_baseUrl),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $_apiKey',
-          'HTTP-Referer': 'https://interview-service.app',
-        },
-        body: jsonEncode({
-          'model': _defaultModel,
-          'messages': [
-            {
-              'role': 'system',
-              'content':
-                  'You evaluate $difficulty $field responses. Return a valid JSON object with a score and feedback.',
-            },
-            {'role': 'user', 'content': prompt},
-          ],
-          'response_format': {'type': 'json_object'},
-          'max_tokens': _maxTokens,
-        }),
-      );
-
-      if (response.statusCode == 200) {
-        final jsonResponse = jsonDecode(response.body);
-        print('Raw API evaluation response: ${response.body}');
-
-        final content = jsonResponse['choices'][0]['message']['content'];
-        print('Raw API evaluation response content: $content');
-
-        try {
-          if (content.trim().isEmpty) {
-            throw Exception('Empty response content from API');
+          // Cache the successful response
+          _evaluationCache[cacheKey] = evaluation;
+          return evaluation;
+        } else {
+          retryCount++;
+          if (retryCount == _maxRetries) {
+            return _getDefaultEvaluation();
           }
-
-          dynamic parsedContent = jsonDecode(content);
-
-          if (parsedContent is Map) {
-            if (parsedContent.containsKey('score') &&
-                parsedContent.containsKey('feedback')) {
-              var score = parsedContent['score'];
-              if (score is String) {
-                try {
-                  score = int.parse(score);
-                } catch (e) {
-                  final numberRegex = RegExp(r'\d+');
-                  final match = numberRegex.firstMatch(score);
-                  score = match != null ? int.parse(match.group(0)!) : 50;
-                }
-              }
-
-              return {
-                'score': score is num ? score : 50,
-                'feedback': parsedContent['feedback'].toString(),
-              };
-            } else {
-              // Try to extract score and feedback
-              final Map<String, dynamic> result = {};
-
-              parsedContent.forEach((key, value) {
-                if (value is num &&
-                    (key.toLowerCase().contains('score') || key == 'rating')) {
-                  result['score'] = value;
-                } else if (value is String &&
-                    (key.toLowerCase().contains('feedback') ||
-                        key.toLowerCase().contains('comment') ||
-                        key.toLowerCase().contains('review'))) {
-                  result['feedback'] = value;
-                }
-              });
-
-              if (result.containsKey('score') ||
-                  result.containsKey('feedback')) {
-                if (!result.containsKey('score')) result['score'] = 50;
-                if (!result.containsKey('feedback')) {
-                  result['feedback'] = 'No detailed feedback available.';
-                }
-                return result;
-              }
-            }
-          }
-
-          return _getDefaultEvaluation();
-        } catch (e) {
-          print('Error parsing API evaluation response: $e');
-          return _getDefaultEvaluation(error: e.toString());
+          await Future.delayed(Duration(seconds: 1 * retryCount));
         }
-      } else if (response.statusCode == 402) {
-        // Handle credit limit error specifically
-        print('Credit limit exceeded: ${response.body}');
-        return _getDefaultEvaluation(isApiLimitError: true);
-      } else {
-        print(
-          'Failed to evaluate answer: ${response.statusCode}, ${response.body}',
-        );
-        return _getDefaultEvaluation();
+      } catch (e) {
+        retryCount++;
+        if (retryCount == _maxRetries) {
+          print('Error evaluating answer after $retryCount retries: $e');
+          return _getDefaultEvaluation();
+        }
+        await Future.delayed(Duration(seconds: 1 * retryCount));
+      }
+    }
+    return _getDefaultEvaluation();
+  }
+
+  static Map<String, dynamic> _extractEvaluation(dynamic jsonResponse) {
+    try {
+      if (jsonResponse.containsKey('choices') &&
+          jsonResponse['choices'] is List &&
+          jsonResponse['choices'].isNotEmpty &&
+          jsonResponse['choices'][0].containsKey('message') &&
+          jsonResponse['choices'][0]['message'].containsKey('content')) {
+        final content = jsonResponse['choices'][0]['message']['content'];
+        final parsedContent = jsonDecode(content);
+
+        if (parsedContent is Map &&
+            parsedContent.containsKey('score') &&
+            parsedContent.containsKey('feedback')) {
+          return {
+            'score': parsedContent['score'],
+            'feedback': parsedContent['feedback'],
+          };
+        }
       }
     } catch (e) {
-      print('Error evaluating answer: $e');
-      return _getDefaultEvaluation(error: e.toString());
+      print('Error parsing evaluation: $e');
     }
+    return _getDefaultEvaluation();
   }
 
   // Helper method to provide default evaluation
-  static Map<String, dynamic> _getDefaultEvaluation({
-    bool isApiLimitError = false,
-    String? error,
-  }) {
-    final String message =
-        isApiLimitError
-            ? 'API credit limit reached. Please upgrade your OpenRouter account for evaluations.'
-            : error != null
-            ? 'Technical issue: $error. A neutral score has been assigned.'
-            : 'Unable to evaluate your answer. A neutral score has been assigned.';
+  static Map<String, dynamic> _getDefaultEvaluation() {
+    return {
+      'score': 50,
+      'feedback':
+          'Unable to evaluate the answer at this time. Please try again.',
+    };
+  }
 
-    return {'score': 50, 'feedback': message};
+  // Clear caches when needed
+  static void clearCaches() {
+    _questionCache.clear();
+    _evaluationCache.clear();
   }
 }
